@@ -1,0 +1,86 @@
+const API_URL = 'https://altlights.sixorbit.com/';
+const SESSION_KEY = 'altlights.session';
+
+export function getSession() {
+  try {
+    return JSON.parse(localStorage.getItem(SESSION_KEY));
+  } catch {
+    return null;
+  }
+}
+
+export function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+}
+
+export async function login({ email, password }) {
+  const query = new URLSearchParams({
+    urlq: 'service',
+    version: '1.0',
+    key: '123',
+    task: 'login',
+    email,
+    password,
+    app_flag: '2',
+    network_ip: '10.0.2.16',
+  });
+
+  const response = await fetch(`${API_URL}?${query.toString()}`);
+  if (!response.ok) throw new Error('We could not reach the login service. Please try again.');
+
+  const payload = await response.json();
+  if (!payload.success || !payload.data?.access_token) {
+    throw new Error(payload.message || 'Your email or password is incorrect.');
+  }
+
+  // Preserve the complete API response, including token and profile, for later API requests.
+  localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+  return payload;
+}
+
+// Use this for future endpoints. Extend `params` with the task-specific fields.
+export async function authenticatedGet(params = {}) {
+  const session = getSession();
+  if (!session?.data?.access_token) throw new Error('Please sign in before making this request.');
+
+  const query = new URLSearchParams({
+    urlq: 'service', version: '1.0', key: '123', access_token: session.data.access_token, ...params,
+  });
+  const response = await fetch(`${API_URL}?${query.toString()}`);
+  if (!response.ok) throw new Error('The request could not be completed.');
+  return response.json();
+}
+
+export async function fetchProducts() {
+  const session = getSession();
+  const userId = session?.data?.user_id;
+  const accessToken = session?.data?.access_token;
+  if (!userId || !accessToken) throw new Error('Please sign in to view products.');
+
+  const payload = await authenticatedGet({
+    task: 'variation/fetch',
+    user_id: userId,
+    access_token: accessToken,
+    last_updated: '',
+    limit: '',
+    searchtext: '',
+    limit_bit: '0',
+  });
+  if (!payload.success) throw new Error(payload.message || 'Products could not be loaded.');
+  return payload.data?.variations || [];
+}
+
+export async function fetchBrands() {
+  const session = getSession();
+  const userId = session?.data?.user_id;
+  const accessToken = session?.data?.access_token;
+  if (!userId || !accessToken) throw new Error('Please sign in to view brands.');
+
+  const payload = await authenticatedGet({
+    task: 'variation/fetch_brand',
+    user_id: userId,
+    access_token: accessToken,
+  });
+  if (!payload.success) throw new Error(payload.message || 'Brands could not be loaded.');
+  return payload.data?.brand || [];
+}
