@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
-import { clearSession, fetchBrands, fetchProducts, getSession, login } from './api';
+import { clearSession, fetchBrands, fetchCustomers, fetchOrderFormData, fetchProducts, fetchVendors, getSession, login } from './api';
 
 const products = [
   { id: 1, name: 'Halo Pendant', type: 'Pendant lighting', price: 12900, image: 'https://images.unsplash.com/photo-1540932239986-30128078f3c5?auto=format&fit=crop&w=900&q=85', tag: 'New' },
@@ -19,7 +19,7 @@ function Header({ page, setPage, cart, session, onLogout }) {
   const go = (target) => { setPage(target); setOpen(false); window.scrollTo(0, 0); };
   return <>
     <header className="header"><button className="brand" onClick={() => go('home')}><span>ALT</span>LIGHTS</button>
-      <nav className={open ? 'nav open' : 'nav'}><button onClick={() => go('shop')}>Shop</button><button onClick={() => go('products')}>Products</button><button onClick={() => go('about')}>Our story</button><button onClick={() => go('contact')}>Contact</button></nav>
+      <nav className={open ? 'nav open' : 'nav'}><button onClick={() => go('shop')}>Shop</button><button onClick={() => go('products')}>Products</button><button onClick={() => go('customers')}>Customers</button><button onClick={() => go('vendors')}>Vendors</button><button onClick={() => go('orders')}>Orders</button><button onClick={() => go('about')}>Our story</button><button onClick={() => go('contact')}>Contact</button></nav>
       <div className="header-actions"><button className="search-icon" aria-label="Search">⌕</button>{session ? <button className="account" onClick={onLogout} title="Sign out">{session.data.profile?.name?.split(' ')[0] || 'Account'} <small>Sign out</small></button> : <button className="account" onClick={() => go('login')}>Login</button>}<button className="bag" onClick={() => go('cart')} aria-label="Shopping bag">Bag <b>{cart.length}</b></button><button className="menu" onClick={() => setOpen(!open)} aria-label="Menu">☰</button></div>
     </header>
   </>;
@@ -89,10 +89,74 @@ function Products({ setPage }) {
   return <main className="products-page section"><p className="eyebrow red">Inventory catalogue</p><div className="products-heading"><div><h1>Products.</h1><p>{filtered.length.toLocaleString('en-IN')} of {items.length.toLocaleString('en-IN')} products</p></div><div className="catalogue-filters"><select value={brandId} onChange={e => { setBrandId(e.target.value); setVisible(24); }} aria-label="Filter by brand"><option value="">All brands</option>{brands.map(brand => <option key={brand.bid} value={brand.bid}>{brand.name}</option>)}</select><input className="product-search" value={search} onChange={e => { setSearch(e.target.value); setVisible(24); }} placeholder="Search name, SKU, brand…" aria-label="Search products"/></div></div><div className="inventory-table"><div className="inventory-row inventory-header"><span>Product</span><span>SKU</span><span>Category</span><span>Brand</span><span>Price</span><span>Status</span></div>{filtered.slice(0, visible).map(item => <div className="inventory-row" key={item.isvid}><div className="inventory-product">{imageUrl(item) ? <img src={imageUrl(item)} alt=""/> : <span className="product-placeholder">ALT</span>}<strong>{item.variation_name || item.item_name}</strong></div><span>{item.sku || '—'}</span><span>{item.category || '—'}</span><span>{item.brand || '—'}</span><strong>{Number(item.mrp || item.price || 0) ? money(Number(item.mrp || item.price)) : '—'}</strong><span className={item.status_name === 'Active' ? 'status active-status' : 'status'}>{item.status_name || '—'}</span></div>)}</div>{!filtered.length && <p className="no-products">No products match your selected filter.</p>}{visible < filtered.length && <button className="load-more" onClick={() => setVisible(current => current + 24)}>Load 24 more <i>→</i></button>}</main>;
 }
 
+function Customers({ setPage }) {
+  const [customers, setCustomers] = useState([]);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('loading');
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    fetchCustomers().then((returnedCustomers) => { if (active) { setCustomers(returnedCustomers); setStatus('ready'); } })
+      .catch((reason) => { if (active) { setError(reason.message || 'Customers could not be loaded.'); setStatus('error'); } });
+    return () => { active = false; };
+  }, []);
+  const shownCustomers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return customers;
+    return customers.filter(customer => [customer.cust_name, customer.company_name, customer.customer_number, customer.mobile, customer.email, customer.gstin].some(value => value?.toLowerCase().includes(query)));
+  }, [customers, search]);
+  const customerName = (customer) => customer.company_name || customer.cust_name || `${customer.fname || ''} ${customer.lname || ''}`.trim() || 'Unnamed customer';
+  const type = (customer) => customer.customer_type === '1' ? 'Business' : 'Individual';
+  if (status === 'loading') return <main className="customers-page section"><p className="eyebrow red">Customer directory</p><h1>Customers.</h1><div className="loading-state"><span></span><p>Loading customer details…</p></div></main>;
+  if (status === 'error') return <main className="customers-page section"><p className="eyebrow red">Customer directory</p><h1>Customers.</h1><div className="error-state"><p>{error}</p><button className="button red-button" onClick={() => setPage('login')}>Sign in <i>→</i></button></div></main>;
+  return <main className="customers-page section"><p className="eyebrow red">Customer directory</p><div className="customers-heading"><div><h1>Customers.</h1><p>{customers.length} recent customers</p></div><input className="customer-search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, number, mobile…" aria-label="Search customers"/></div><div className="customer-grid">{shownCustomers.map(customer => <article className="customer-card" key={customer.cuid}><div className="customer-card-heading"><span className="customer-avatar">{customerName(customer).slice(0, 1).toUpperCase()}</span><div><h2>{customerName(customer)}</h2><p>Customer #{customer.customer_number || '—'}</p></div><span className="customer-type">{type(customer)}</span></div><div className="customer-details"><p><b>Mobile</b>{customer.mobile || '—'}</p><p><b>Email</b>{customer.email || '—'}</p><p><b>GSTIN</b>{customer.gstin || '—'}</p><p><b>Address</b>{customer.address || '—'}</p></div><div className="customer-card-footer"><span>{customer.custatusid === '1' ? 'Active' : 'Inactive'}</span><strong>{Number(customer.wallet_balance || 0) ? money(Number(customer.wallet_balance)) : 'No wallet balance'}</strong></div></article>)}</div>{!shownCustomers.length && <p className="no-products">No customers match “{search}”.</p>}</main>;
+}
+
+function Orders({ setPage }) {
+  const [orderData, setOrderData] = useState(null);
+  const [status, setStatus] = useState('loading');
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    fetchOrderFormData().then(data => { if (active) { setOrderData(data); setStatus('ready'); } })
+      .catch(reason => { if (active) { setError(reason.message || 'Order data could not be loaded.'); setStatus('error'); } });
+    return () => { active = false; };
+  }, []);
+  if (status === 'loading') return <main className="orders-page section"><p className="eyebrow red">Order workspace</p><h1>Orders.</h1><div className="loading-state"><span></span><p>Loading order form data…</p></div></main>;
+  if (status === 'error') return <main className="orders-page section"><p className="eyebrow red">Order workspace</p><h1>Orders.</h1><div className="error-state"><p>{error}</p><button className="button red-button" onClick={() => setPage('login')}>Sign in <i>→</i></button></div></main>;
+  const form = orderData.order_form_data || {};
+  const outlets = form.outlet || [];
+  const salesTypes = form.customer_sales_types || [];
+  const payments = form.paymentModeData || [];
+  const taxes = orderData.tax_list || [];
+  const charges = orderData.charges_list || [];
+  return <main className="orders-page section"><p className="eyebrow red">Order workspace</p><div className="orders-heading"><div><h1>Orders.</h1><p>Order form settings from your account.</p></div><div className="delivery-date"><span>Delivery date</span><strong>{orderData.delivery_date || '—'}</strong></div></div><div className="order-summary"><div><span>Outlets</span><strong>{outlets.length}</strong></div><div><span>Sales types</span><strong>{salesTypes.length}</strong></div><div><span>Payment methods</span><strong>{payments.length}</strong></div><div><span>Tax rates</span><strong>{taxes.length}</strong></div></div><div className="order-columns"><section className="order-section"><h2>Order details</h2><label>Outlet<select>{outlets.map(outlet => <option key={outlet.id} value={outlet.id}>{outlet.name}</option>)}</select></label><label>Customer sales type<select>{salesTypes.map(type => <option key={type.custid} value={type.custid}>{type.name}</option>)}</select></label><div className="sales-account"><span>Sales account</span><strong>{form.ledgerInfo?.name || '—'}</strong></div></section><section className="order-section"><h2>Available payment methods</h2><div className="tag-list">{payments.map(payment => <span key={payment.cpoid}>{payment.name}</span>)}</div></section><section className="order-section"><h2>Tax & charges</h2><div className="tax-list">{taxes.map(tax => <div key={tax.butapid}><span>{tax.name}</span><strong>{Number(tax.value)}%</strong></div>)}{charges.map(charge => <div key={charge.ecid}><span>{charge.title}</span><strong>Charge</strong></div>)}</div></section></div></main>;
+}
+
+function Vendors({ setPage }) {
+  const [vendors, setVendors] = useState([]);
+  const [search, setSearch] = useState('I');
+  const [requestedSearch, setRequestedSearch] = useState('I');
+  const [status, setStatus] = useState('loading');
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    setStatus('loading'); setError('');
+    fetchVendors(requestedSearch).then(data => { if (active) { setVendors(data); setStatus('ready'); } })
+      .catch(reason => { if (active) { setError(reason.message || 'Vendors could not be loaded.'); setStatus('error'); } });
+    return () => { active = false; };
+  }, [requestedSearch]);
+  const submitSearch = (event) => { event.preventDefault(); setRequestedSearch(search); };
+  const address = (vendor) => vendor.c_address || [vendor.address_line_1, vendor.address_line_2, vendor.c_city].filter(Boolean).join(', ');
+  if (status === 'loading' && !vendors.length) return <main className="vendors-page section"><p className="eyebrow red">Supplier directory</p><h1>Vendors.</h1><div className="loading-state"><span></span><p>Loading vendor details…</p></div></main>;
+  if (status === 'error') return <main className="vendors-page section"><p className="eyebrow red">Supplier directory</p><h1>Vendors.</h1><div className="error-state"><p>{error}</p><button className="button red-button" onClick={() => setPage('login')}>Sign in <i>→</i></button></div></main>;
+  return <main className="vendors-page section"><p className="eyebrow red">Supplier directory</p><div className="vendors-heading"><div><h1>Vendors.</h1><p>{vendors.length} results for “{requestedSearch || 'all vendors'}”</p></div><form onSubmit={submitSearch}><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search vendors…" aria-label="Search vendors"/><button disabled={status === 'loading'}>{status === 'loading' ? 'Searching…' : 'Search →'}</button></form></div><div className="vendor-grid">{vendors.map(vendor => <article className="vendor-card" key={vendor.venid}><div className="vendor-card-heading"><span className="vendor-avatar">{vendor.name?.slice(0, 1) || 'V'}</span><div><h2>{vendor.name || 'Unnamed vendor'}</h2><p>Vendor #{vendor.vendor_number || '—'}</p></div><span className={vendor.registered === '2' ? 'vendor-status active-vendor' : 'vendor-status'}>{vendor.registered === '2' ? 'Registered' : 'Unregistered'}</span></div><div className="vendor-details"><p><b>Mobile</b>{vendor.mobile || '—'}</p><p><b>Email</b>{vendor.vendor_email || '—'}</p><p><b>GSTIN</b>{vendor.gstin || '—'}</p><p><b>PAN</b>{vendor.pan || '—'}</p><p className="vendor-address"><b>Address</b>{address(vendor) || '—'}</p></div><div className="vendor-card-footer"><span>{vendor.tax_type || 'Tax details unavailable'}</span><strong>{Number(vendor.credit_limit || 0) ? money(Number(vendor.credit_limit)) : 'No credit limit'}</strong></div></article>)}</div>{!vendors.length && <p className="no-products">No vendors found for “{requestedSearch}”.</p>}</main>;
+}
+
 function Cart({ cart, setCart, setPage }) { const total = cart.reduce((sum, p) => sum + p.price, 0); return <main className="cart section"><p className="eyebrow red">Your selection</p><h1>Your bag.</h1>{cart.length ? <><div className="cart-list">{cart.map((item, i) => <div className="cart-item" key={`${item.id}-${i}`}><img src={item.image} alt=""/><div><h3>{item.name}</h3><p>{item.type}</p><strong>{money(item.price)}</strong></div><button onClick={() => setCart(cart.filter((_, index) => index !== i))}>Remove</button></div>)}</div><div className="cart-total"><span>Subtotal</span><strong>{money(total)}</strong><button className="button red-button">Proceed to checkout <i>→</i></button></div></> : <div className="empty"><p>Your bag is waiting for its first beautiful light.</p><button className="button red-button" onClick={() => setPage('shop')}>Explore collection <i>→</i></button></div>}</main>; }
 
 function Footer({ setPage }) { return <footer><div className="footer-top"><button className="brand" onClick={() => setPage('home')}><span>ALT</span>LIGHTS</button><p>Better light for a<br/>better way of living.</p><div><button onClick={() => setPage('shop')}>Shop</button><button onClick={() => setPage('about')}>Our story</button><button onClick={() => setPage('contact')}>Contact</button></div></div><div className="footer-bottom"><span>© 2025 ALTLIGHTS</span><span>Designed for everyday life</span></div></footer> }
 
-function App() { const [page, setPage] = useState('home'); const [cart, setCart] = useState([]); const [selected, setSelected] = useState(products[0]); const [session, setSession] = useState(() => getSession()); const addToCart = (item) => setCart(current => [...current, item]); const logout = () => { clearSession(); setSession(null); setPage('home'); }; useEffect(() => { document.title = `${page === 'home' ? 'ALTLIGHTS' : page[0].toUpperCase()+page.slice(1)} — ALTLIGHTS`; }, [page]); const props = { setPage, addToCart, setSelected }; const pages = { home: <Home {...props}/>, shop: <Shop {...props}/>, product: <Product item={selected} {...props}/>, about: <About {...props}/>, contact: <Contact/>, cart: <Cart cart={cart} setCart={setCart} setPage={setPage}/>, login: <Login setPage={setPage} onSuccess={setSession}/>, products: <Products setPage={setPage}/> }; return <><Header page={page} setPage={setPage} cart={cart} session={session} onLogout={logout}/>{pages[page]}{page !== 'login' && <Footer setPage={setPage}/>}</> }
+function App() { const [page, setPage] = useState('home'); const [cart, setCart] = useState([]); const [selected, setSelected] = useState(products[0]); const [session, setSession] = useState(() => getSession()); const addToCart = (item) => setCart(current => [...current, item]); const logout = () => { clearSession(); setSession(null); setPage('home'); }; useEffect(() => { document.title = `${page === 'home' ? 'ALTLIGHTS' : page[0].toUpperCase()+page.slice(1)} — ALTLIGHTS`; }, [page]); const props = { setPage, addToCart, setSelected }; const pages = { home: <Home {...props}/>, shop: <Shop {...props}/>, product: <Product item={selected} {...props}/>, about: <About {...props}/>, contact: <Contact/>, cart: <Cart cart={cart} setCart={setCart} setPage={setPage}/>, login: <Login setPage={setPage} onSuccess={setSession}/>, products: <Products setPage={setPage}/>, customers: <Customers setPage={setPage}/>, vendors: <Vendors setPage={setPage}/>, orders: <Orders setPage={setPage}/> }; return <><Header page={page} setPage={setPage} cart={cart} session={session} onLogout={logout}/>{pages[page]}{page !== 'login' && <Footer setPage={setPage}/>}</> }
 
 createRoot(document.getElementById('root')).render(<App />);
