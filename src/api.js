@@ -141,3 +141,41 @@ export async function fetchVendors(search = 'I') {
   if (!payload.success) throw new Error(payload.message || 'Vendors could not be loaded.');
   return payload.data?.vendors || [];
 }
+
+export async function fetchCustomerAddresses(cuid) {
+  const session = getSession();
+  const userId = session?.data?.user_id;
+  const accessToken = session?.data?.access_token;
+  if (!userId || !accessToken) throw new Error('Please sign in to view customer addresses.');
+
+  const payload = await authenticatedGet({
+    version: '4.0',
+    task: 'customer/customer_address_list',
+    user_id: userId,
+    access_token: accessToken,
+    cuid,
+  });
+  if (!payload.success) throw new Error(payload.message || 'Customer addresses could not be loaded.');
+  return payload.data?.address_list || [];
+}
+
+export async function createSalesOrder(orderData) {
+  const session = getSession();
+  const userId = session?.data?.user_id;
+  const accessToken = session?.data?.access_token;
+  if (!userId || !accessToken) throw new Error('Please sign in before creating an order.');
+
+  const query = new URLSearchParams({
+    urlq: 'service', version: '5.0', key: '123', task: 'chkorder/create_order_submit', user_id: userId, access_token: accessToken,
+  });
+  const body = new URLSearchParams({ data: JSON.stringify(orderData) });
+  const response = await fetch(`${API_URL}?${query.toString()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+    body,
+  });
+  if (!response.ok) throw new Error('The sales order could not be submitted.');
+  const payload = await response.json();
+  if (!payload.success) throw new Error(payload.message || 'The sales order could not be created.');
+  return payload;
+}
