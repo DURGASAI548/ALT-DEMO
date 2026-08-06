@@ -64,7 +64,7 @@ export async function fetchProducts() {
     last_updated: '',
     limit: '',
     searchtext: '',
-    limit_bit: '0',
+    limit_bit: '1',
   });
   if (!payload.success) throw new Error(payload.message || 'Products could not be loaded.');
   return payload.data?.variations || [];
